@@ -1,0 +1,6 @@
+---
+source: tui/src/terminal_multiplexer.rs
+assertion_line: 368
+expression: "fork_command_usage(Some(&Multiplexer::Tmux { version: None }))"
+---
+Usage: /fork [up|down|left|right]

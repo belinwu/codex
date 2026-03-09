@@ -1,0 +1,6 @@
+---
+source: tui/src/terminal_multiplexer.rs
+assertion_line: 372
+expression: "fork_command_usage(Some(&Multiplexer::Zellij {}))"
+---
+Usage: /fork [right|down|float]
