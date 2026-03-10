@@ -851,6 +851,24 @@ impl App {
                 Feature::WindowsSandbox | Feature::WindowsSandboxElevated
             )
         });
+        let approval_review_policy_is_configured = || {
+            let effective_config = self.config.config_layer_stack.effective_config();
+            if let Some(profile) = self.active_profile.as_deref() {
+                effective_config
+                    .as_table()
+                    .and_then(|table| table.get("profiles"))
+                    .and_then(TomlValue::as_table)
+                    .and_then(|profiles| profiles.get(profile))
+                    .and_then(TomlValue::as_table)
+                    .is_some_and(|profile_config| {
+                        profile_config.contains_key("approval_review_policy")
+                    })
+            } else {
+                effective_config
+                    .as_table()
+                    .is_some_and(|table| table.contains_key("approval_review_policy"))
+            }
+        };
         let mut permissions_history_label: Option<&'static str> = None;
         let mut builder = ConfigEditsBuilder::new(&self.config.codex_home)
             .with_profile(self.active_profile.as_deref());
@@ -903,24 +921,18 @@ impl App {
             self.chat_widget
                 .set_feature_enabled(feature, effective_enabled);
             if feature == Feature::GuardianApproval {
-                let approval_review_policy = if effective_enabled {
-                    ApprovalReviewPolicy::AutoOnly
-                } else {
-                    ApprovalReviewPolicy::ManualOnly
-                };
-                self.config.approval_review_policy = approval_review_policy;
-                self.chat_widget
-                    .set_approval_review_policy(approval_review_policy);
-                builder = builder.with_edits([ConfigEdit::SetPath {
-                    segments: scoped_segments("approval_review_policy"),
-                    value: approval_review_policy.to_string().into(),
-                }]);
-                if previous_enabled != effective_enabled {
-                    permissions_history_label = Some(if effective_enabled {
-                        "Smart Approvals"
-                    } else {
-                        "Default"
-                    });
+                let approval_review_policy_was_configured = approval_review_policy_is_configured();
+                if effective_enabled && !approval_review_policy_was_configured {
+                    self.config.approval_review_policy = ApprovalReviewPolicy::AutoOnly;
+                    self.chat_widget
+                        .set_approval_review_policy(ApprovalReviewPolicy::AutoOnly);
+                    builder = builder.with_edits([ConfigEdit::SetPath {
+                        segments: scoped_segments("approval_review_policy"),
+                        value: ApprovalReviewPolicy::AutoOnly.to_string().into(),
+                    }]);
+                    if previous_enabled != effective_enabled {
+                        permissions_history_label = Some("Smart Approvals");
+                    }
                 }
             }
             if feature == Feature::GuardianApproval && effective_enabled {
@@ -3682,6 +3694,7 @@ impl App {
                 model_provider_id: config_snapshot.model_provider_id,
                 service_tier: config_snapshot.service_tier,
                 approval_policy: config_snapshot.approval_policy,
+                approval_review_policy: config_snapshot.approval_review_policy,
                 sandbox_policy: config_snapshot.sandbox_policy,
                 cwd: config_snapshot.cwd,
                 reasoning_effort: config_snapshot.reasoning_effort,
@@ -4183,6 +4196,7 @@ mod tests {
                 model_provider_id: "test-provider".to_string(),
                 service_tier: None,
                 approval_policy: AskForApproval::Never,
+                approval_review_policy: ApprovalReviewPolicy::ManualOnly,
                 sandbox_policy: SandboxPolicy::new_read_only_policy(),
                 cwd: PathBuf::from("/tmp/project"),
                 reasoning_effort: None,
@@ -4355,6 +4369,7 @@ mod tests {
                         model_provider_id: "test-provider".to_string(),
                         service_tier: None,
                         approval_policy: AskForApproval::Never,
+                        approval_review_policy: ApprovalReviewPolicy::ManualOnly,
                         sandbox_policy: SandboxPolicy::new_read_only_policy(),
                         cwd: PathBuf::from("/tmp/project"),
                         reasoning_effort: None,
@@ -4432,6 +4447,7 @@ mod tests {
                 model_provider_id: "test-provider".to_string(),
                 service_tier: None,
                 approval_policy: AskForApproval::Never,
+                approval_review_policy: ApprovalReviewPolicy::ManualOnly,
                 sandbox_policy: SandboxPolicy::new_read_only_policy(),
                 cwd: PathBuf::from("/tmp/project"),
                 reasoning_effort: None,
@@ -4513,6 +4529,7 @@ mod tests {
                 model_provider_id: "test-provider".to_string(),
                 service_tier: None,
                 approval_policy: AskForApproval::Never,
+                approval_review_policy: ApprovalReviewPolicy::ManualOnly,
                 sandbox_policy: SandboxPolicy::new_read_only_policy(),
                 cwd: PathBuf::from("/tmp/project"),
                 reasoning_effort: None,
@@ -4593,6 +4610,7 @@ mod tests {
                 model_provider_id: "test-provider".to_string(),
                 service_tier: None,
                 approval_policy: AskForApproval::Never,
+                approval_review_policy: ApprovalReviewPolicy::ManualOnly,
                 sandbox_policy: SandboxPolicy::new_read_only_policy(),
                 cwd: PathBuf::from("/tmp/project"),
                 reasoning_effort: None,
@@ -4667,6 +4685,7 @@ mod tests {
                 model_provider_id: "test-provider".to_string(),
                 service_tier: None,
                 approval_policy: AskForApproval::Never,
+                approval_review_policy: ApprovalReviewPolicy::ManualOnly,
                 sandbox_policy: SandboxPolicy::new_read_only_policy(),
                 cwd: PathBuf::from("/tmp/project"),
                 reasoning_effort: None,
@@ -4780,6 +4799,7 @@ mod tests {
                         model_provider_id: "test-provider".to_string(),
                         service_tier: None,
                         approval_policy: AskForApproval::Never,
+                        approval_review_policy: ApprovalReviewPolicy::ManualOnly,
                         sandbox_policy: SandboxPolicy::new_read_only_policy(),
                         cwd: PathBuf::from("/tmp/project"),
                         reasoning_effort: None,
@@ -4849,6 +4869,7 @@ mod tests {
                 model_provider_id: "test-provider".to_string(),
                 service_tier: None,
                 approval_policy: AskForApproval::Never,
+                approval_review_policy: ApprovalReviewPolicy::ManualOnly,
                 sandbox_policy: SandboxPolicy::new_read_only_policy(),
                 cwd: PathBuf::from("/tmp/project"),
                 reasoning_effort: None,
@@ -4952,6 +4973,7 @@ mod tests {
                 model_provider_id: "test-provider".to_string(),
                 service_tier: None,
                 approval_policy: AskForApproval::Never,
+                approval_review_policy: ApprovalReviewPolicy::ManualOnly,
                 sandbox_policy: SandboxPolicy::new_read_only_policy(),
                 cwd: PathBuf::from("/tmp/project"),
                 reasoning_effort: None,
@@ -5028,6 +5050,7 @@ mod tests {
                 model_provider_id: "test-provider".to_string(),
                 service_tier: None,
                 approval_policy: AskForApproval::Never,
+                approval_review_policy: ApprovalReviewPolicy::ManualOnly,
                 sandbox_policy: SandboxPolicy::new_read_only_policy(),
                 cwd: PathBuf::from("/tmp/project"),
                 reasoning_effort: None,
@@ -5291,7 +5314,7 @@ mod tests {
         );
         assert_eq!(
             app.config.approval_review_policy,
-            ApprovalReviewPolicy::ManualOnly
+            ApprovalReviewPolicy::AutoOnly
         );
         assert_eq!(
             app.config.permissions.approval_policy.value(),
@@ -5299,7 +5322,7 @@ mod tests {
         );
         assert_eq!(
             app.chat_widget.config_ref().approval_review_policy,
-            ApprovalReviewPolicy::ManualOnly
+            ApprovalReviewPolicy::AutoOnly
         );
         assert_eq!(app.runtime_approval_policy_override, None);
         assert!(
@@ -5309,7 +5332,55 @@ mod tests {
 
         let config = std::fs::read_to_string(codex_home.path().join("config.toml"))?;
         assert!(!config.contains("guardian_approval = true"));
+        assert!(config.contains("approval_review_policy = \"auto-only\""));
+        assert!(config.contains("approval_policy = \"on-request\""));
+        assert!(config.contains("sandbox_mode = \"workspace-write\""));
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn update_feature_flags_enabling_guardian_keeps_explicit_manual_review_policy()
+    -> Result<()> {
+        let (mut app, _app_event_rx, mut op_rx) = make_test_app_with_channels().await;
+        let codex_home = tempdir()?;
+        app.config.codex_home = codex_home.path().to_path_buf();
+        std::fs::write(
+            codex_home.path().join("config.toml"),
+            "approval_review_policy = \"manual-only\"\n",
+        )?;
+
+        app.update_feature_flags(vec![(Feature::GuardianApproval, true)])
+            .await;
+
+        assert!(app.config.features.enabled(Feature::GuardianApproval));
+        assert_eq!(
+            app.config.approval_review_policy,
+            ApprovalReviewPolicy::ManualOnly
+        );
+        assert_eq!(
+            app.chat_widget.config_ref().approval_review_policy,
+            ApprovalReviewPolicy::ManualOnly
+        );
+        assert_eq!(
+            app.config.permissions.approval_policy.value(),
+            AskForApproval::OnRequest
+        );
+        assert_eq!(
+            app.chat_widget
+                .config_ref()
+                .permissions
+                .sandbox_policy
+                .get(),
+            &SandboxPolicy::new_workspace_write_policy()
+        );
+        assert!(
+            op_rx.try_recv().is_err(),
+            "feature toggle should not patch the active session"
+        );
+
+        let config = std::fs::read_to_string(codex_home.path().join("config.toml"))?;
         assert!(config.contains("approval_review_policy = \"manual-only\""));
+        assert!(config.contains("guardian_approval = true"));
         assert!(config.contains("approval_policy = \"on-request\""));
         assert!(config.contains("sandbox_mode = \"workspace-write\""));
         Ok(())
@@ -5417,6 +5488,7 @@ mod tests {
                         model_provider_id: "test-provider".to_string(),
                         service_tier: None,
                         approval_policy: AskForApproval::OnRequest,
+                        approval_review_policy: ApprovalReviewPolicy::ManualOnly,
                         sandbox_policy: SandboxPolicy::new_workspace_write_policy(),
                         cwd: PathBuf::from("/tmp/agent"),
                         reasoning_effort: None,
@@ -5637,6 +5709,7 @@ mod tests {
                 model_provider_id: "test-provider".to_string(),
                 service_tier: None,
                 approval_policy: AskForApproval::Never,
+                approval_review_policy: ApprovalReviewPolicy::ManualOnly,
                 sandbox_policy: SandboxPolicy::new_read_only_policy(),
                 cwd: PathBuf::from("/tmp/project"),
                 reasoning_effort: Some(ReasoningEffortConfig::High),
@@ -6287,6 +6360,7 @@ mod tests {
                 model_provider_id: "test-provider".to_string(),
                 service_tier: None,
                 approval_policy: AskForApproval::Never,
+                approval_review_policy: ApprovalReviewPolicy::ManualOnly,
                 sandbox_policy: SandboxPolicy::new_read_only_policy(),
                 cwd: next_cwd.clone(),
                 reasoning_effort: None,
@@ -6402,6 +6476,7 @@ mod tests {
                 model_provider_id: "test-provider".to_string(),
                 service_tier: None,
                 approval_policy: AskForApproval::Never,
+                approval_review_policy: ApprovalReviewPolicy::ManualOnly,
                 sandbox_policy: SandboxPolicy::new_read_only_policy(),
                 cwd: PathBuf::from("/home/user/project"),
                 reasoning_effort: None,
@@ -6461,6 +6536,7 @@ mod tests {
                 model_provider_id: "test-provider".to_string(),
                 service_tier: None,
                 approval_policy: AskForApproval::Never,
+                approval_review_policy: ApprovalReviewPolicy::ManualOnly,
                 sandbox_policy: SandboxPolicy::new_read_only_policy(),
                 cwd: PathBuf::from("/home/user/project"),
                 reasoning_effort: None,
@@ -6553,6 +6629,7 @@ mod tests {
                 model_provider_id: "test-provider".to_string(),
                 service_tier: None,
                 approval_policy: AskForApproval::Never,
+                approval_review_policy: ApprovalReviewPolicy::ManualOnly,
                 sandbox_policy: SandboxPolicy::new_read_only_policy(),
                 cwd: PathBuf::from("/home/user/project"),
                 reasoning_effort: None,
@@ -6618,6 +6695,7 @@ mod tests {
                 model_provider_id: "test-provider".to_string(),
                 service_tier: None,
                 approval_policy: AskForApproval::Never,
+                approval_review_policy: ApprovalReviewPolicy::ManualOnly,
                 sandbox_policy: SandboxPolicy::new_read_only_policy(),
                 cwd: PathBuf::from("/home/user/project"),
                 reasoning_effort: None,
@@ -6698,6 +6776,7 @@ mod tests {
                 model_provider_id: "test-provider".to_string(),
                 service_tier: None,
                 approval_policy: AskForApproval::Never,
+                approval_review_policy: ApprovalReviewPolicy::ManualOnly,
                 sandbox_policy: SandboxPolicy::new_read_only_policy(),
                 cwd: PathBuf::from("/home/user/project"),
                 reasoning_effort: None,
@@ -6825,6 +6904,7 @@ mod tests {
             model_provider_id: "test-provider".to_string(),
             service_tier: None,
             approval_policy: AskForApproval::Never,
+            approval_review_policy: ApprovalReviewPolicy::ManualOnly,
             sandbox_policy: SandboxPolicy::new_read_only_policy(),
             cwd: PathBuf::from("/home/user/project"),
             reasoning_effort: None,
@@ -6894,6 +6974,7 @@ mod tests {
                 model_provider_id: "test-provider".to_string(),
                 service_tier: None,
                 approval_policy: AskForApproval::Never,
+                approval_review_policy: ApprovalReviewPolicy::ManualOnly,
                 sandbox_policy: SandboxPolicy::new_read_only_policy(),
                 cwd: PathBuf::from("/tmp/project"),
                 reasoning_effort: None,
